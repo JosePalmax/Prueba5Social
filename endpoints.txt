@@ -1,0 +1,60 @@
+COPIA
+GET - https://localhost:7142/api/Copia
+GET - https://localhost:7142/api/Copia/1
+POST - https://localhost:7142/api/Copia
+{
+  "id": 0,
+  "libroId": 1,
+  "disponible": true
+}
+PUT - https://localhost:7142/api/Copia/1
+{
+  "id": 0,
+  "libroId": 1,
+  "disponible": true
+}
+DELETE - https://localhost:7142/api/Copia/1
+
+----------------------------------------------------------------
+
+LIBRO
+GET - https://localhost:7142/api/Libro
+GET - https://localhost:7142/api/Libro/1
+POST - https://localhost:7142/api/Libro
+{
+  "id": 0,
+  "titulo": "Titulo",
+  "autor": "Autor",
+  "genero": "Genero"
+}
+PUT - https://localhost:7142/api/Libro/1
+{
+  "id": 0,
+  "titulo": "CambioTitulo",
+  "autor": "CambioAutor",
+  "genero": "CambioGenero"
+}
+DELETE - https://localhost:7142/api/Libro/1
+
+----------------------------------------------------------------
+
+PRESTAMO
+GET - https://localhost:7142/api/Prestamo
+GET - https://localhost:7142/api/Prestamo/1
+POST - https://localhost:7142/api/Prestamo
+{
+  "id": 0,
+  "copiaId": 1,
+  "codigoFiscal": "123456789",
+  "fechaPrestamo": "2025-02-27T15:19:23.967Z",
+  "fechaDevolucion": "2025-02-27T15:19:23.967Z"
+}
+PUT - https://localhost:7142/api/Prestamo/1
+{
+  "id": 0,
+  "copiaId": 2,
+  "codigoFiscal": "123456789",
+  "fechaPrestamo": "2025-02-27T15:19:23.967Z",
+  "fechaDevolucion": "2025-02-27T15:19:23.967Z"
+}
+DELETE - https://localhost:7142/api/Prestamo/6
