@@ -5,26 +5,6 @@ GO
 USE pruebaITS;
 GO
 
--- Crear la tabla Personas
-CREATE TABLE Personas (
-    CodigoFiscal NVARCHAR(50) PRIMARY KEY,
-    Nombre NVARCHAR(100) NOT NULL,
-    Apellido NVARCHAR(100) NOT NULL
-);
-GO
-
--- Insertar datos en la tabla Personas
-INSERT INTO Personas (CodigoFiscal, Nombre, Apellido)
-VALUES
-('123456789', 'Juan', 'Pérez'),
-('987654321', 'Ana', 'Gómez'),
-('456123789', 'Carlos', 'López'),
-('111222333', 'Pedro', 'Sánchez'),
-('444555666', 'María', 'Rodríguez'),
-('777888999', 'Luis', 'Martínez'),
-('101112131', 'Elena', 'García');
-GO
-
 -- Crear la tabla Libros
 CREATE TABLE Libros (
     Id INT IDENTITY(1,1) PRIMARY KEY,
@@ -74,18 +54,17 @@ CREATE TABLE Prestamos (
     CodigoFiscal NVARCHAR(50) NOT NULL,
     FechaPrestamo DATE NOT NULL,
     FechaDevolucion DATE NOT NULL,
-    FOREIGN KEY (CopiaId) REFERENCES Copias(Id) ON DELETE CASCADE,
-    FOREIGN KEY (CodigoFiscal) REFERENCES Personas(CodigoFiscal) ON DELETE CASCADE
+    FOREIGN KEY (CopiaId) REFERENCES Copias(Id) ON DELETE CA1SCADE
 );
 GO
 
 -- Insertar datos en la tabla Prestamos
 INSERT INTO Prestamos (CopiaId, CodigoFiscal, FechaPrestamo, FechaDevolucion)
 VALUES
-(1, '123456789', '2025-01-15', '2025-01-22'),  -- Préstamo vencido (vencido)
-(2, '987654321', '2025-02-05', '2025-02-12'),  -- Préstamo vencido (vencido)
-(3, '456123789', '2025-02-10', '2025-02-17'),  -- Préstamo vencido (vencido)
-(4, '111222333', '2025-02-15', '2025-02-22'),  -- Préstamo en fecha
-(5, '444555666', '2025-02-17', '2025-02-24'),  -- Préstamo en fecha
-(6, '777888999', '2025-02-19', '2025-02-26');  -- Préstamo vence en 3 dias
+(1, '111222333', '2025-01-15', '2025-01-22'),  -- Préstamo vencido (vencido)
+(2, '147258369', '2025-02-05', '2025-02-12'),  -- Préstamo vencido (vencido)
+(3, '123456789', '2025-02-10', '2025-02-17'),  -- Préstamo vencido (vencido)
+(4, '159753862', '2025-02-15', '2025-02-22'),  -- Préstamo en fecha
+(5, '258741963', '2025-02-17', '2025-02-24'),  -- Préstamo en fecha
+(6, '164761438', '2025-02-19', '2025-02-26');  -- Préstamo vence en 3 dias
 GO
