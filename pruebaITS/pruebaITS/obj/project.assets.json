@@ -3136,11 +3136,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\usuario\\source\\repos\\pruebaITS\\pruebaITS\\pruebaITS.csproj",
+      "projectUniqueName": "C:\\Users\\usuario\\source\\repos\\prueba5Social\\pruebaITS\\pruebaITS\\pruebaITS.csproj",
       "projectName": "pruebaITS",
-      "projectPath": "C:\\Users\\usuario\\source\\repos\\pruebaITS\\pruebaITS\\pruebaITS.csproj",
+      "projectPath": "C:\\Users\\usuario\\source\\repos\\prueba5Social\\pruebaITS\\pruebaITS\\pruebaITS.csproj",
       "packagesPath": "C:\\Users\\usuario\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\usuario\\source\\repos\\pruebaITS\\pruebaITS\\obj\\",
+      "outputPath": "C:\\Users\\usuario\\source\\repos\\prueba5Social\\pruebaITS\\pruebaITS\\obj\\",
       "projectStyle": "PackageReference",
       "configFilePaths": [
         "C:\\Users\\usuario\\AppData\\Roaming\\NuGet\\NuGet.Config",

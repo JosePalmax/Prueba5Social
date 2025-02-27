@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
 using pruebaITS.Models;
+using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 
 namespace pruebaITS.Controllers
 {
@@ -8,119 +9,110 @@ namespace pruebaITS.Controllers
     [ApiController]
     public class CopiaController : Controller
     {
-        public readonly string con;
+        private readonly string con;
+        private readonly DbHelper dbHelper;
 
         public CopiaController(IConfiguration configuration)
         {
             con = configuration.GetConnectionString("conexion");
+            dbHelper = new DbHelper(con);
         }
 
         [HttpGet]
-        public IEnumerable<Copia> Get()
+        public IActionResult Get()
         {
-            List<Copia> copias = new List<Copia>();
+            string query = "SELECT * FROM Copias";
 
-            using (SqlConnection connection = new(con))
+            try
             {
-                connection.Open();
-                using (SqlCommand cmd = new("SELECT * FROM Copias", connection))
-                {
-                    using (SqlDataReader reader = cmd.ExecuteReader())
-                    {
-                        while (reader.Read())
-                        {
-                            Copia copia = new Copia
-                            {
-                                Id = Convert.ToInt32(reader["Id"]),
-                                LibroId = Convert.ToInt32(reader["LibroId"]),
-                                Disponible = Convert.ToBoolean(reader["Disponible"])
-                            };
-                            copias.Add(copia);
-                        }
-                    }
-                }
+                return Ok(dbHelper.GetDataFilters(query, dbHelper.MapCopia, 0));
             }
-            return copias;
+            catch (Exception ex)
+            {
+                return BadRequest(new { mensaje = "Error al realizar la operación", error = ex.Message });
+            }
         }
 
         [HttpGet("{id}")]
         public IActionResult GetCopia(int id)
         {
-            using (SqlConnection connection = new(con))
+            string query = "SELECT * FROM Copias WHERE Id = @Id";
+            try
             {
-                connection.Open();
-                using (SqlCommand cmd = new("SELECT * FROM Copias WHERE Id = @Id", connection))
-                {
-                    cmd.Parameters.AddWithValue("@Id", id);
-                    using (SqlDataReader reader = cmd.ExecuteReader())
-                    {
-                        if (reader.Read())
-                        {
-                            Copia copia = new Copia
-                            {
-                                Id = Convert.ToInt32(reader["Id"]),
-                                LibroId = Convert.ToInt32(reader["LibroId"]),
-                                Disponible = Convert.ToBoolean(reader["Disponible"])
-                            };
-                            return Ok(copia);
-                        }
-                        else
-                        {
-                            return NotFound(new { mensaje = "Copia no encontrada" });
-                        }
-                    }
-                }
+                var copias = dbHelper.GetDataFilters(query, dbHelper.MapCopia, id);
+                if (copias.Any())
+                    return Ok(copias.First());
+                else
+                    return NotFound(new { mensaje = "Copia no encontrada" });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { mensaje = "Error al realizar la operación", error = ex.Message });
             }
         }
 
         [HttpPost]
         public IActionResult Post([FromBody] Copia copia)
         {
-            using (SqlConnection connection = new(con))
+            string queryLibros = "SELECT * FROM Libros WHERE Id = @Id";
+
+            try
             {
-                connection.Open();
-                using (SqlCommand cmd = new("SELECT COUNT(*) FROM Libros WHERE Id = @LibroId", connection))
+                if (dbHelper.GetDataFilters(queryLibros, dbHelper.MapLibro, copia.LibroId).Any())
                 {
-                    cmd.Parameters.AddWithValue("@LibroId", copia.LibroId);
-
-                    int libroCount = (int)cmd.ExecuteScalar();
-
-                    if (libroCount == 0)
+                    using (SqlConnection connection = new(con))
                     {
-                        return NotFound(new { mensaje = "Libro no encontrado." });
+                        connection.Open();
+                        using (SqlCommand cmd = new("INSERT INTO Copias (LibroId, Disponible) VALUES (@LibroId, @EstaDisponible)", connection))
+                        {
+                            cmd.Parameters.AddWithValue("@LibroId", copia.LibroId);
+                            cmd.Parameters.AddWithValue("@EstaDisponible", copia.Disponible);
+
+                            cmd.ExecuteNonQuery();
+                        }
                     }
                 }
-
-                using (SqlCommand cmd = new("INSERT INTO Copias (LibroId, Disponible) VALUES (@LibroId, @EstaDisponible)", connection))
-                {
-                    cmd.Parameters.AddWithValue("@LibroId", copia.LibroId);
-                    cmd.Parameters.AddWithValue("@EstaDisponible", copia.Disponible);
-
-                    cmd.ExecuteNonQuery();
-                }
+                else
+                    return NotFound(new { mensaje = "No se ha encontrado el Libro que intenta referenciar" });
             }
-
-            return Ok(new { mensaje = "Copia agregada con éxito." });
+            catch (Exception ex)
+            {
+                return BadRequest(new { mensaje = "Error al realizar la operación", error = ex.Message });
+            }
+            return StatusCode(201, new { mensaje = "Copia agregada con éxito." });
         }
 
         [HttpPut("{id}")]
         public IActionResult Put([FromBody] Copia copia, int id)
         {
-            using (SqlConnection connection = new(con))
+            string queryLibros = "SELECT * FROM Libros WHERE Id = @Id";
+            try
             {
-                connection.Open();
-                using (SqlCommand cmd = new("UPDATE Copias SET LibroId = @LibroId, Disponible = @Disponible WHERE Id = @Id", connection))
+                if (dbHelper.GetDataFilters(queryLibros, dbHelper.MapLibro, copia.LibroId).Any())
                 {
-                    cmd.Parameters.AddWithValue("@Id", id);
-                    cmd.Parameters.AddWithValue("@LibroId", copia.LibroId);
-                    cmd.Parameters.AddWithValue("@Disponible", copia.Disponible);
-                    int rowsAffected = cmd.ExecuteNonQuery();
-
-                    if (rowsAffected == 0)
+                    using (SqlConnection connection = new(con))
                     {
-                        return NotFound(new { mensaje = "No se ha podido actualizar la copia" });
+                        connection.Open();
+                        using (SqlCommand cmd = new("UPDATE Copias SET LibroId = @LibroId, Disponible = @Disponible WHERE Id = @Id", connection))
+                        {
+                            cmd.Parameters.AddWithValue("@Id", id);
+                            cmd.Parameters.AddWithValue("@LibroId", copia.LibroId);
+                            cmd.Parameters.AddWithValue("@Disponible", copia.Disponible);
+                            int rowsAffected = cmd.ExecuteNonQuery();
+
+                            if (rowsAffected == 0)
+                            {
+                                return NotFound(new { mensaje = "No se ha podido actualizar la copia" });
+                            }
+                        }
                     }
                 }
+                else
+                    return NotFound(new { mensaje = "No se ha encontrado el Libro que intenta referenciar" });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { mensaje = "Error al realizar la operación", error = ex.Message });
             }
             return Ok(new { mensaje = "Copia actualizada con éxito" });
 
@@ -129,77 +121,62 @@ namespace pruebaITS.Controllers
         [HttpDelete("{id}")]
         public IActionResult Delete(int id)
         {
-            using (SqlConnection connection = new(con))
+            string query = "SELECT * FROM Copias WHERE Id = @Id";
+            try
             {
-                connection.Open();
-                using (SqlCommand cmd = new("DELETE FROM Copias WHERE Id = @Id", connection))
+                if (dbHelper.GetDataFilters(query, dbHelper.MapCopia, id).Any())
                 {
-                    cmd.Parameters.AddWithValue("@Id", id);
-                    int rowsAffected = cmd.ExecuteNonQuery();
-
-                    if (rowsAffected == 0)
+                    using (SqlConnection connection = new(con))
                     {
-                        return NotFound(new { mensaje = "No se ha podido borrar la Copia" });
+                        connection.Open();
+                        using (SqlCommand cmd = new("DELETE FROM Copias WHERE Id = @Id", connection))
+                        {
+                            cmd.Parameters.AddWithValue("@Id", id);
+                            int rowsAffected = cmd.ExecuteNonQuery();
+
+                            if (rowsAffected == 0)
+                            {
+                                return BadRequest(new { mensaje = "No se ha podido borrar la Copia" });
+                            }
+                        }
                     }
                 }
+                else
+                    return NotFound(new { mensaje = "No se ha encontrado la copia" });
             }
-            return Ok(new { mensaje = "Copia borrada con éxito" });
+            catch (Exception ex)
+            {
+                return BadRequest(new { mensaje = "Error al realizar la operación", error = ex.Message });
+            }
+            return NoContent();
         }
 
         [HttpGet("getCopiasDisponibles")]
-        public IEnumerable<Copia> GetDisponibles()
+        public IActionResult GetDisponibles()
         {
-            List<Copia> copias = new List<Copia>();
-
-            using (SqlConnection connection = new(con))
+            string query = "SELECT * FROM Copias WHERE Disponible = 1";
+            try
             {
-                connection.Open();
-                using (SqlCommand cmd = new("SELECT * FROM Copias WHERE Disponible = 1", connection))
-                {
-                    using (SqlDataReader reader = cmd.ExecuteReader())
-                    {
-                        while (reader.Read())
-                        {
-                            Copia copia = new Copia
-                            {
-                                Id = Convert.ToInt32(reader["Id"]),
-                                LibroId = Convert.ToInt32(reader["LibroId"]),
-                                Disponible = Convert.ToBoolean(reader["Disponible"])
-                            };
-                            copias.Add(copia);
-                        }
-                    }
-                }
+                return Ok(dbHelper.GetDataFilters(query, dbHelper.MapCopia, 0));
             }
-            return copias;
+            catch (Exception ex)
+            {
+                return BadRequest(new { mensaje = "Error al realizar la operación", error = ex.Message });
+            }
         }
 
         [HttpGet("getCopiasNoDisponibles")]
-        public IEnumerable<Copia> GetNoDisponibles()
+        public IActionResult GetNoDisponibles()
         {
-            List<Copia> copias = new List<Copia>();
-
-            using (SqlConnection connection = new(con))
+            string query = "SELECT * FROM Copias WHERE Disponible = 0";
+            try
             {
-                connection.Open();
-                using (SqlCommand cmd = new("SELECT * FROM Copias WHERE Disponible = 0", connection))
-                {
-                    using (SqlDataReader reader = cmd.ExecuteReader())
-                    {
-                        while (reader.Read())
-                        {
-                            Copia copia = new Copia
-                            {
-                                Id = Convert.ToInt32(reader["Id"]),
-                                LibroId = Convert.ToInt32(reader["LibroId"]),
-                                Disponible = Convert.ToBoolean(reader["Disponible"])
-                            };
-                            copias.Add(copia);
-                        }
-                    }
-                }
+                return Ok(dbHelper.GetDataFilters(query, dbHelper.MapCopia, 0));
             }
-            return copias;
+            catch (Exception ex)
+            {
+                return BadRequest(new { mensaje = "Error al realizar la operación", error = ex.Message });
+            }
         }
     }
 }

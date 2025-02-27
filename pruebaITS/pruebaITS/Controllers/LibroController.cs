@@ -2,7 +2,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
 using pruebaITS.Models;
-using static Microsoft.EntityFrameworkCore.DbLoggerCategory.Database;
 
 namespace pruebaITS.Controllers
 {
@@ -10,130 +9,130 @@ namespace pruebaITS.Controllers
     [ApiController]
     public class LibroController : Controller
     {
-        public readonly string con;
+        private readonly string con;
+        private readonly DbHelper dbHelper;
 
         public LibroController(IConfiguration configuration)
         {
             con = configuration.GetConnectionString("conexion");
+            dbHelper = new DbHelper(con);
         }
 
         [HttpGet]
-        public IEnumerable<Libro> Get()
+        public IActionResult Get()
         {
-            List<Libro> libros = new List<Libro>();
-
-            using (SqlConnection connection = new (con))
+            string query = "SELECT * FROM Libros";
+            try
             {
-                connection.Open();
-                using (SqlCommand cmd = new("SELECT * FROM Libros", connection))
-                {
-                    using (SqlDataReader reader = cmd.ExecuteReader())
-                    {
-                        while (reader.Read())
-                        {
-                            Libro libro = new Libro { 
-                                Id = Convert.ToInt32(reader["Id"]),
-                                Titulo = reader["Titulo"].ToString(),
-                                Autor = reader["Autor"].ToString(),
-                                Genero = reader["Genero"].ToString(),
-                            };
-                            libros.Add(libro);
-                        }
-                    }
-                }
+                return Ok(dbHelper.GetDataFilters(query, dbHelper.MapLibro, 0));
             }
-            return libros;
+            catch (Exception ex)
+            {
+                return BadRequest(new { mensaje = "Error al realizar la operación", error = ex.Message });
+            }
         }
 
         [HttpGet("{id}")]
         public IActionResult GetLibro(int id)
         {
-            using (SqlConnection connection = new(con))
+            string query = "SELECT * FROM Libros WHERE Id = @Id";
+            try
             {
-                connection.Open();
-                using (SqlCommand cmd = new("SELECT * FROM Libros WHERE Id = @Id", connection))
-                {
-                    cmd.Parameters.AddWithValue("@Id", id);
-                    using (SqlDataReader reader = cmd.ExecuteReader())
-                    {
-                        if (reader.Read())
-                        {
-                            Libro libro = new Libro
-                            {
-                                Id = Convert.ToInt32(reader["Id"]),
-                                Titulo = reader["Titulo"].ToString(),
-                                Autor = reader["Autor"].ToString(),
-                                Genero = reader["Genero"].ToString(),
-                            };
-                            return Ok(libro);
-                        }
-                        else
-                        {
-                            return NotFound(new { mensaje = "Libro no encontrado" });
-                        }
-                    }
-                }
+                var libros = dbHelper.GetDataFilters(query, dbHelper.MapLibro, id);
+                if (libros.Any())
+                    return Ok(libros.First());
+                else
+                    return NotFound(new { mensaje = "Libro no encontrado" });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { mensaje = "Error al realizar la operación", error = ex.Message });
             }
         }
 
         [HttpPost]
-        public void Post([FromBody] Libro libro)
+        public IActionResult Post([FromBody] Libro libro)
         {
-            using (SqlConnection connection = new(con))
+            try
             {
-                connection.Open();
-                using (SqlCommand cmd = new("INSERT INTO Libros (Titulo, Autor, Genero) VALUES (@Titulo, @Autor, @Genero)", connection))
+                using (SqlConnection connection = new(con))
                 {
-                    cmd.Parameters.AddWithValue("@Titulo", libro.Titulo);
-                    cmd.Parameters.AddWithValue("@Autor", libro.Autor);
-                    cmd.Parameters.AddWithValue("@Genero", libro.Genero);
-                    cmd.ExecuteNonQuery();
+                    connection.Open();
+                    using (SqlCommand cmd = new("INSERT INTO Libros (Titulo, Autor, Genero) VALUES (@Titulo, @Autor, @Genero)", connection))
+                    {
+
+                        cmd.Parameters.AddWithValue("@Titulo", libro.Titulo);
+                        cmd.Parameters.AddWithValue("@Autor", libro.Autor);
+                        cmd.Parameters.AddWithValue("@Genero", libro.Genero);
+                        cmd.ExecuteNonQuery();
+                    }
                 }
             }
+            catch (Exception ex)
+            {
+                return BadRequest(new { mensaje = "Error al realizar la operación", error = ex.Message });
+            }
+            return StatusCode(201, new { mensaje = "Copia agregada con éxito." });
         }
 
         [HttpPut("{id}")]
         public IActionResult Put([FromBody] Libro libro, int id)
         {
-            using (SqlConnection connection = new(con))
+            try
             {
-                connection.Open();
-                using (SqlCommand cmd = new("UPDATE Libros SET Titulo = @Titulo, Autor = @Autor, Genero = @Genero WHERE Id = @Id", connection))
+                using (SqlConnection connection = new(con))
                 {
-                    cmd.Parameters.AddWithValue("@Id", id);
-                    cmd.Parameters.AddWithValue("@Titulo", libro.Titulo);
-                    cmd.Parameters.AddWithValue("@Autor", libro.Autor);
-                    cmd.Parameters.AddWithValue("@Genero", libro.Genero);
-                    int rowsAffected = cmd.ExecuteNonQuery();
-
-                    if (rowsAffected == 0)
+                    connection.Open();
+                    using (SqlCommand cmd = new("UPDATE Libros SET Titulo = @Titulo, Autor = @Autor, Genero = @Genero WHERE Id = @Id", connection))
                     {
-                        return NotFound(new { mensaje = "No se ha podido actualizar el Libro" });
+                        cmd.Parameters.AddWithValue("@Id", id);
+                        cmd.Parameters.AddWithValue("@Titulo", libro.Titulo);
+                        cmd.Parameters.AddWithValue("@Autor", libro.Autor);
+                        cmd.Parameters.AddWithValue("@Genero", libro.Genero);
+
+                        int rowsAffected = cmd.ExecuteNonQuery();
+
+                        if (rowsAffected == 0)
+                            return NotFound(new { mensaje = "No se ha podido actualizar el Libro" });
                     }
                 }
             }
-            return Ok(new { mensaje = "Libro actualizado con éxito" });
+            catch (Exception ex)
+            {
+                return BadRequest(new { mensaje = "Error al realizar la operación", error = ex.Message });
+            }
+            return Ok(new { mensaje = "Copia editada con éxito." });
         }
 
         [HttpDelete("{id}")]
         public IActionResult Delete(int id)
         {
-            using (SqlConnection connection = new(con))
+            string query = "SELECT * FROM Libros WHERE Id = @Id"; try
             {
-                connection.Open();
-                using (SqlCommand cmd = new("DELETE FROM Libros WHERE Id = @Id", connection))
+                using (SqlConnection connection = new(con))
                 {
-                    cmd.Parameters.AddWithValue("@Id", id);
-                    int rowsAffected = cmd.ExecuteNonQuery();
-
-                    if (rowsAffected == 0)
+                    connection.Open();
+                    if (dbHelper.GetDataFilters(query, dbHelper.MapLibro, id).Any())
                     {
-                        return NotFound(new { mensaje = "No se ha podido borrar el Libro" });
+                        using (SqlCommand cmd = new("DELETE FROM Libros WHERE Id = @Id", connection))
+                        {
+                            cmd.Parameters.AddWithValue("@Id", id);
+
+                            int rowsAffected = cmd.ExecuteNonQuery();
+
+                            if (rowsAffected == 0)
+                                return BadRequest(new { mensaje = "No se ha podido borrar el Libro" });
+                        }
                     }
+                    else
+                        return NotFound(new { mensaje = "No se encontrado el Libro a borrar" });
                 }
             }
-            return Ok(new { mensaje = "Libro borrado con éxito" });
+            catch (Exception ex)
+            {
+                return BadRequest(new { mensaje = "Error al realizar la operación", error = ex.Message });
+            }
+            return NoContent();
         }
-
     }
 }

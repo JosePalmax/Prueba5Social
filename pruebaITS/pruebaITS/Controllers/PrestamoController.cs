@@ -1,6 +1,8 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
 using pruebaITS.Models;
+using System.Transactions;
+using static Microsoft.EntityFrameworkCore.DbLoggerCategory.Database;
 
 namespace pruebaITS.Controllers
 {
@@ -8,72 +10,45 @@ namespace pruebaITS.Controllers
     [ApiController]
     public class PrestamoController : Controller
     {
-        public readonly string con;
+        private readonly string con;
+        private readonly DbHelper dbHelper;
 
         public PrestamoController(IConfiguration configuration)
         {
             con = configuration.GetConnectionString("conexion");
+            dbHelper = new DbHelper(con);
         }
 
         [HttpGet]
-        public IEnumerable<Prestamo> Get()
+        public IActionResult Get()
         {
-            List<Prestamo> prestamos = new List<Prestamo>();
-
-            using (SqlConnection connection = new(con))
+            string query = "SELECT * FROM Prestamos";
+            try
             {
-                connection.Open();
-                using (SqlCommand cmd = new("SELECT * FROM Prestamos", connection))
-                {
-                    using (SqlDataReader reader = cmd.ExecuteReader())
-                    {
-                        while (reader.Read())
-                        {
-                            Prestamo prestamo = new Prestamo
-                            {
-                                Id = Convert.ToInt32(reader["Id"]),
-                                CopiaId = Convert.ToInt32(reader["CopiaId"]),
-                                CodigoFiscal = reader["CodigoFiscal"].ToString(),
-                                FechaPrestamo = Convert.ToDateTime(reader["FechaPrestamo"]),
-                                FechaDevolucion = Convert.ToDateTime(reader["FechaDevolucion"])
-                            };
-                            prestamos.Add(prestamo);
-                        }
-                    }
-                }
+                return Ok(dbHelper.GetDataFilters(query, dbHelper.MapPrestamo, 0));
             }
-            return prestamos;
+            catch (Exception ex)
+            {
+                return BadRequest(new { mensaje = "Error al realizar la operación", error = ex.Message });
+            }
+
         }
 
         [HttpGet("{id}")]
         public IActionResult GetPrestamo(int id)
         {
-            using (SqlConnection connection = new(con))
+            string query = "SELECT * FROM Prestamos WHERE Id = @Id";
+            try
             {
-                connection.Open();
-                using (SqlCommand cmd = new("SELECT * FROM Prestamos WHERE Id = @Id", connection))
-                {
-                    cmd.Parameters.AddWithValue("@Id", id);
-                    using (SqlDataReader reader = cmd.ExecuteReader())
-                    {
-                        if (reader.Read())
-                        {
-                            Prestamo prestamo = new Prestamo
-                            {
-                                Id = Convert.ToInt32(reader["Id"]),
-                                CopiaId = Convert.ToInt32(reader["CopiaId"]),
-                                CodigoFiscal = reader["CodigoFiscal"].ToString(),
-                                FechaPrestamo = Convert.ToDateTime(reader["FechaPrestamo"]),
-                                FechaDevolucion = Convert.ToDateTime(reader["FechaDevolucion"])
-                            };
-                            return Ok(prestamo);
-                        }
-                        else
-                        {
-                            return NotFound(new { mensaje = "Préstamo no encontrado" });
-                        }
-                    }
-                }
+                var prestamos = dbHelper.GetDataFilters(query, dbHelper.MapPrestamo, id);
+                if (prestamos.Any())
+                    return Ok(prestamos.First());
+                else
+                    return NotFound(new { mensaje = "Prestamo no encontrado" });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { mensaje = "Error al realizar la operación", error = ex.Message });
             }
         }
 
@@ -83,27 +58,35 @@ namespace pruebaITS.Controllers
             prestamo.FechaPrestamo = DateTime.Now;
 
             prestamo.FechaDevolucion = CalcularFechas(prestamo.FechaPrestamo, 7);
-
-            using (SqlConnection connection = new(con))
+            try
             {
-                connection.Open();
-
-                if (!IsCopiaDisponible(prestamo.CopiaId, connection))
+                using (SqlConnection connection = new(con))
                 {
-                    return BadRequest(new { mensaje = "La copia no está disponible" });
-                }
+                    connection.Open();
 
-                using (SqlCommand cmd = new("INSERT INTO Prestamos (CopiaId, CodigoFiscal, FechaPrestamo, FechaDevolucion) VALUES (@CopiaId, @CodigoFiscal, @FechaPrestamo, @FechaDevolucion)", connection))
-                {
-                    cmd.Parameters.AddWithValue("@CopiaId", prestamo.CopiaId);
-                    cmd.Parameters.AddWithValue("@CodigoFiscal", prestamo.CodigoFiscal);
-                    cmd.Parameters.AddWithValue("@FechaPrestamo", prestamo.FechaPrestamo);
-                    cmd.Parameters.AddWithValue("@FechaDevolucion", prestamo.FechaDevolucion);
-                    cmd.ExecuteNonQuery();
+                    if (!IsCopiaDisponible(prestamo.CopiaId))
+                    {
+                        return BadRequest(new { mensaje = "La copia no está disponible" });
+                    }
+
+                    using (SqlCommand cmd = new("INSERT INTO Prestamos (CopiaId, CodigoFiscal, FechaPrestamo, FechaDevolucion)" +
+                        " VALUES (@CopiaId, @CodigoFiscal, @FechaPrestamo, @FechaDevolucion)", connection))
+                    {
+
+                        cmd.Parameters.AddWithValue("@CopiaId", prestamo.CopiaId);
+                        cmd.Parameters.AddWithValue("@CodigoFiscal", prestamo.CodigoFiscal);
+                        cmd.Parameters.AddWithValue("@FechaPrestamo", prestamo.FechaPrestamo);
+                        cmd.Parameters.AddWithValue("@FechaDevolucion", prestamo.FechaDevolucion);
+                        cmd.ExecuteNonQuery();
+                    }
+
                 }
             }
-
-            return Ok(new { mensaje = "Préstamo realizado con éxito" });
+            catch (Exception ex)
+            {
+                return BadRequest(new { mensaje = "Error al realizar la operación", error = ex.Message });
+            }
+            return StatusCode(201, new { mensaje = "Préstamo realizado con éxito" });
         }
 
         [HttpPut("{id}")]
@@ -111,83 +94,128 @@ namespace pruebaITS.Controllers
         {
 
             prestamo.FechaDevolucion = CalcularFechas(prestamo.FechaPrestamo, 7);
-            int copiaIdAnterior = 0;
-
-            using (SqlConnection connection = new(con))
+            string queryCopia = "SELECT * FROM Prestamos WHERE Id = @Id";
+            try
             {
-                connection.Open();
+                var copiaIdAnterior = dbHelper.GetDataFilters(queryCopia, dbHelper.MapPrestamo, id).FirstOrDefault();
 
-
-                using (SqlCommand cmd = new("SELECT CopiaId FROM Prestamos WHERE Id = @Id", connection))
+                if (copiaIdAnterior != null)
                 {
-                    cmd.Parameters.AddWithValue("@Id", id);
-                    var result = cmd.ExecuteScalar();
-
-                    if (result != null)
+                    if (prestamo.CopiaId != copiaIdAnterior.CopiaId)
                     {
-                        copiaIdAnterior = Convert.ToInt32(result);
+                        if (!IsCopiaDisponible(prestamo.CopiaId))
+                        {
+                            return BadRequest(new { mensaje = "La copia no está disponible" });
+                        }
                     }
-                    else
+                    if (prestamo.CopiaId > 0)
                     {
-                        return NotFound(new { mensaje = "Préstamo no encontrado para actualizar" });
+                        using (SqlConnection connection = new(con))
+                        {
+                            connection.Open();
+                            using (var transaction = connection.BeginTransaction())
+                            {
+                                try
+                                {
+                                    if (prestamo.CopiaId != copiaIdAnterior.CopiaId)
+                                    {
+                                        using (SqlCommand cmd = new("UPDATE Copias SET Disponible = 1 WHERE Id = @CopiaId", connection, transaction))
+                                        {
+                                            cmd.Parameters.AddWithValue("@CopiaId", copiaIdAnterior.CopiaId);
+                                            cmd.ExecuteNonQuery();
+                                        }
+                                        using (SqlCommand cmd = new("UPDATE Copias SET Disponible = 0 WHERE Id = @CopiaId", connection, transaction))
+                                        {
+                                            cmd.Parameters.AddWithValue("@CopiaId", prestamo.CopiaId);
+                                            cmd.ExecuteNonQuery();
+                                        }
+                                    }
+                                    using (SqlCommand cmd = new("UPDATE Prestamos SET CopiaId = @CopiaId, CodigoFiscal = @CodigoFiscal," +
+                                        " FechaPrestamo = @FechaPrestamo, FechaDevolucion = @FechaDevolucion WHERE Id = @Id", connection, transaction))
+                                    {
+                                        cmd.Parameters.AddWithValue("@Id", id);
+                                        cmd.Parameters.AddWithValue("@CopiaId", prestamo.CopiaId);
+                                        cmd.Parameters.AddWithValue("@CodigoFiscal", prestamo.CodigoFiscal);
+                                        cmd.Parameters.AddWithValue("@FechaPrestamo", prestamo.FechaPrestamo);
+                                        cmd.Parameters.AddWithValue("@FechaDevolucion", prestamo.FechaDevolucion);
+                                        int rowsAffected = cmd.ExecuteNonQuery();
+
+                                        if (rowsAffected == 0)
+                                        {
+                                            return NotFound(new { mensaje = "Préstamo no encontrado para actualizar" });
+                                        }
+                                    }
+                                    transaction.Commit();
+                                }
+                                catch (Exception ex)
+                                {
+                                    transaction.Rollback();
+                                    return BadRequest(new { mensaje = "Error al realizar la operación", error = ex.Message });
+                                }
+                            }
+                        }
+                        return Ok(new { mensaje = "Prestamo actualizado con éxito" });
                     }
                 }
-                if (prestamo.CopiaId != copiaIdAnterior)
-                {
-                    if (!IsCopiaDisponible(prestamo.CopiaId, connection))
-                    {
-                        return BadRequest(new { mensaje = "La copia no está disponible" });
-                    }
-                }
-                if (copiaIdAnterior > 0)
-                {
-                    using (SqlCommand cmd = new("UPDATE Copias SET Disponible = 1 WHERE Id = @CopiaId", connection))
-                    {
-                        cmd.Parameters.AddWithValue("@CopiaId", copiaIdAnterior);
-                        cmd.ExecuteNonQuery();
-                    }
-                }
-                using (SqlCommand cmd = new("UPDATE Prestamos SET CopiaId = @CopiaId, CodigoFiscal = @CodigoFiscal, FechaPrestamo = @FechaPrestamo, FechaDevolucion = @FechaDevolucion WHERE Id = @Id", connection))
-                {
-                    cmd.Parameters.AddWithValue("@Id", id);
-                    cmd.Parameters.AddWithValue("@CopiaId", prestamo.CopiaId);
-                    cmd.Parameters.AddWithValue("@CodigoFiscal", prestamo.CodigoFiscal);
-                    cmd.Parameters.AddWithValue("@FechaPrestamo", prestamo.FechaPrestamo);
-                    cmd.Parameters.AddWithValue("@FechaDevolucion", prestamo.FechaDevolucion);
-                    int rowsAffected = cmd.ExecuteNonQuery();
-
-                    if (rowsAffected == 0)
-                    {
-                        return NotFound(new { mensaje = "Préstamo no encontrado para actualizar" });
-                    }
-                }
+                else
+                    return NotFound(new { mensaje = "Préstamo no encontrado para actualizar" });
             }
+            catch (Exception e)
+            {
+                return BadRequest(new { mensaje = "Error al realizar la operación", error = e.Message });
+            }
+
             return Ok(new { mensaje = "Préstamo actualizado con éxito" });
         }
 
-        [HttpDelete]
+        [HttpDelete("{id}")]
         public IActionResult Delete(int id)
         {
-            using (SqlConnection connection = new(con))
+            string query = "SELECT * FROM Prestamos WHERE Id = @Id";
+            string queryCopia = "SELECT * FROM Copias WHERE Id = @Id";
+            try
             {
-                connection.Open();
-                using (SqlCommand cmd = new("DELETE FROM Prestamos WHERE Id = @Id", connection))
+                var prestamoDel = dbHelper.GetDataFilters(query, dbHelper.MapPrestamo, id);
+                if (prestamoDel.Any())
                 {
-                    cmd.Parameters.AddWithValue("@Id", id);
-                    int rowsAffected = cmd.ExecuteNonQuery();
+                    var copiaLib = dbHelper.GetDataFilters(queryCopia, dbHelper.MapCopia, prestamoDel.FirstOrDefault().CopiaId);
 
-                    if (rowsAffected == 0)
+                    using (SqlConnection connection = new(con))
                     {
-                        return NotFound(new { mensaje = "No se ha podido borrar el Préstamo" });
+                        connection.Open();
+                        if (copiaLib.Any())
+                        {
+                            using (SqlCommand cmd = new("UPDATE Copias SET Disponible = 1 WHERE Id = @CopiaId", connection))
+                            {
+                                cmd.Parameters.AddWithValue("@CopiaId", copiaLib.First().Id);
+                                cmd.ExecuteNonQuery();
+                            }
+                        }
+                        using (SqlCommand cmd = new("DELETE FROM Prestamos WHERE Id = @Id", connection))
+                        {
+                            cmd.Parameters.AddWithValue("@Id", id);
+                            int rowsAffected = cmd.ExecuteNonQuery();
+
+                            if (rowsAffected == 0)
+                            {
+                                return NotFound(new { mensaje = "No se ha podido borrar el Préstamo" });
+                            }
+                        }
                     }
                 }
+                else
+                    return NotFound(new { mensaje = "No se ha encontrado el prestamo" });
             }
-            return Ok(new { mensaje = "Préstamo borrado con éxito" });
+            catch (Exception ex)
+            {
+                return BadRequest(new { mensaje = "Error al realizar la operación", error = ex.Message });
+            }
 
+            return NoContent();
         }
 
         [HttpGet("prestamoVencido")]
-        public IEnumerable<Prestamo> ObtenerPrestamosVencidos()
+        public IActionResult ObtenerPrestamosVencidos()
         {
             List<Prestamo> prestamosVencidos = new List<Prestamo>();
 
@@ -197,30 +225,29 @@ namespace pruebaITS.Controllers
                 using (SqlCommand cmd = new("SELECT * FROM Prestamos WHERE FechaDevolucion < @FechaActual", connection))
                 {
                     cmd.Parameters.AddWithValue("@FechaActual", DateTime.Now);
-
-                    using (SqlDataReader reader = cmd.ExecuteReader())
+                    try
                     {
-                        while (reader.Read())
+                        using (SqlDataReader reader = cmd.ExecuteReader())
                         {
-                            Prestamo prestamo = new Prestamo
+                            while (reader.Read())
                             {
-                                Id = Convert.ToInt32(reader["Id"]),
-                                CopiaId = Convert.ToInt32(reader["CopiaId"]),
-                                CodigoFiscal = reader["CodigoFiscal"].ToString(),
-                                FechaPrestamo = Convert.ToDateTime(reader["FechaPrestamo"]),
-                                FechaDevolucion = Convert.ToDateTime(reader["FechaDevolucion"])
-                            };
-                            prestamosVencidos.Add(prestamo);
+                                Prestamo prestamo = dbHelper.MapPrestamo(reader);
+                                prestamosVencidos.Add(prestamo);
+                            }
                         }
                     }
+                    catch (Exception ex)
+                    {
+                        return BadRequest(new { mensaje = "Error al realizar la operación", error = ex.Message }); ;
+                    }
+
                 }
             }
-
-            return prestamosVencidos;
+            return Ok(prestamosVencidos);
         }
 
         [HttpGet("proximosVencimientos")]
-        public IEnumerable<Prestamo> ObtenerProximosVencimientos()
+        public IActionResult ObtenerProximosVencimientos()
         {
             List<Prestamo> proximosVencimientos = new List<Prestamo>();
             DateTime fechaActual = DateTime.Now;
@@ -233,58 +260,51 @@ namespace pruebaITS.Controllers
                 {
                     cmd.Parameters.AddWithValue("@FechaActual", fechaActual);
                     cmd.Parameters.AddWithValue("@FechaLimite", fechaLimite);
-                    using (SqlDataReader reader = cmd.ExecuteReader())
+                    try
                     {
-                        while (reader.Read())
+                        using (SqlDataReader reader = cmd.ExecuteReader())
                         {
-                            Prestamo prestamo = new Prestamo
+                            while (reader.Read())
                             {
-                                Id = Convert.ToInt32(reader["Id"]),
-                                CopiaId = Convert.ToInt32(reader["CopiaId"]),
-                                CodigoFiscal = reader["CodigoFiscal"].ToString(),
-                                FechaPrestamo = Convert.ToDateTime(reader["FechaPrestamo"]),
-                                FechaDevolucion = Convert.ToDateTime(reader["FechaDevolucion"])
-                            };
-                            proximosVencimientos.Add(prestamo);
+                                Prestamo prestamo = dbHelper.MapPrestamo(reader);
+                                proximosVencimientos.Add(prestamo);
+                            }
                         }
+                    }
+                    catch (Exception ex)
+                    {
+                        return BadRequest(new { mensaje = "Error al realizar la operación", error = ex.Message });
                     }
                 }
             }
-            return proximosVencimientos;
+            return Ok(proximosVencimientos);
         }
 
-        private bool IsCopiaDisponible(int copiaId, SqlConnection connection)
+        private bool IsCopiaDisponible(int copiaId)
         {
-            using (SqlCommand cmd = new("SELECT Disponible FROM Copias WHERE Id = @CopiaId", connection))
+            string query = "SELECT * FROM Copias WHERE Id = @Id";
+            try
             {
-                cmd.Parameters.AddWithValue("@CopiaId", copiaId);
-
-                var result = cmd.ExecuteScalar();
-
-                if (result != null && (bool)result)
-                {
-                    using (SqlCommand updateCmd = new("UPDATE Copias SET Disponible = 0 WHERE Id = @CopiaId", connection))
-                    {
-                        updateCmd.Parameters.AddWithValue("@CopiaId", copiaId);
-                        updateCmd.ExecuteNonQuery();
-                    }
-                    return true;
-                }
-
+                var copia = dbHelper.GetDataFilters(query, dbHelper.MapCopia, copiaId);
+                if (copia.Any())
+                    return copia.First().Disponible;
+                else
+                    return false;
+            }
+            catch (Exception)
+            {
                 return false;
             }
         }
         private DateTime CalcularFechas(DateTime fechaPrestamo, int dias)
         {
-            DateTime fechaDevolucion = fechaPrestamo.AddDays(dias);
+            DateTime fechaDevolucion = fechaPrestamo;
 
-            if (fechaDevolucion.DayOfWeek == DayOfWeek.Saturday)
-            {
-                fechaDevolucion = fechaDevolucion.AddDays(2);
-            }
-            else if (fechaDevolucion.DayOfWeek == DayOfWeek.Sunday)
+            while (dias > 0)
             {
                 fechaDevolucion = fechaDevolucion.AddDays(1);
+                if (fechaDevolucion.DayOfWeek != DayOfWeek.Saturday && fechaDevolucion.DayOfWeek != DayOfWeek.Sunday)
+                    dias--;
             }
 
             return fechaDevolucion;

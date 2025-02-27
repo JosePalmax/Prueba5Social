@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("pruebaITS")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+02b2059f50450968750943f431890a916ceffcfa")]
 [assembly: System.Reflection.AssemblyProductAttribute("pruebaITS")]
 [assembly: System.Reflection.AssemblyTitleAttribute("pruebaITS")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
